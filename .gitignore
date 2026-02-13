@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.venv
+data/raw/
+data/processed/
+*.xlsx
+*.csv
+*.parquet
+.DS_Store
+Thumbs.db
