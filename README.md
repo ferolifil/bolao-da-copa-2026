@@ -35,6 +35,8 @@ Gabarito (ver `etl/etl_gabarito.ipynb`):
 Arquivos binarios/dados brutos nao entram no Git para evitar inchar o historico, expor dados e dificultar diff. Use `.gitignore` para manter apenas codigo e instrucoes de obtencao dos dados.
 
 ## Proximos passos
+- Ordenacao dos grupos ja esta implementada (pts > confronto direto > sg > gp > nome do pais).
+- Definir e implementar a regra de melhores terceiros colocados entre os grupos.
 - Consolidar pontuacao com `gabarito_fg` e gerar ranking.
 - Validar nomes de times com `paises` e mapear aliases.
 - Preparar leitura de GSheets e workflow do GitHub Actions com `cron`.
