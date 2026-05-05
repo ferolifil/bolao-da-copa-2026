@@ -11,3 +11,4 @@ data/processed/
 .DS_Store
 Thumbs.db
 client_secret.json
+token.json
