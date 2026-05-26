@@ -10,5 +10,8 @@ data/processed/
 *.parquet
 .DS_Store
 Thumbs.db
-client_secret.json
+*secret*.json
 token.json
+validar_credenciais.ipynb
+validar_creds.py
+run_ci.bat
