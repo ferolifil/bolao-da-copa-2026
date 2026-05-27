@@ -94,8 +94,72 @@ def tips_processing(df_tips: pd.DataFrame) -> pd.DataFrame:
         default="D"
     )
 
-    # Selects and renames columns to create the final DataFrame for analysis, including player name, match reference, teams, predicted goals, and predicted result.
+    # Selects
     df_tips_gs_final = df_tips_gs_pivot_unpivot[['Nome','nm_cfr','nm_time_casa','vl_time_casa','nm_time_fora', 'vl_time_fora','result_ref_casa']]
     df_tips_gs_final = df_tips_gs_final.rename(columns={'Nome': 'nm_player'})
 
     return normalize_df(df_tips_gs_final)
+
+def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_check: int) -> pd.DataFrame:
+    """
+    Calculates the score and ranking for each player based on their predictions and the actual match results.
+
+    This function merges the tips DataFrame with the results DataFrame, compares predictions with actual outcomes,
+    assigns points according to the prediction accuracy, and ranks the players. It also adds the current round and
+    a timestamp for tracking.
+
+    Parameters
+    ----------
+    df_tips : pandas.DataFrame
+        DataFrame containing players' predictions, processed and normalized.
+    df_results : pandas.DataFrame
+        DataFrame containing the actual results for each match, processed and normalized.
+    round_check : int
+        The current round number, used for tracking.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with player names, total points, rankings, round number, and last update timestamp.
+    """
+    # Calculate the actual result for the home team based on the actual goals for both teams, 
+    # assigning "V" for home win, "E" for draw, "D" for away win, and an empty string for games that have not been played.
+    df_results["result_ref_casa"] = np.select(
+        [
+            (df_results["vl_time_casa"].isna()) | (df_results["vl_time_fora"].isna()),  # game not played or missing data
+            (df_results["vl_time_casa"] > df_results["vl_time_fora"]).fillna(False),   # home team win
+            (df_results["vl_time_casa"] == df_results["vl_time_fora"]).fillna(False),  # draw
+        ],
+        ["", "V", "E"],  # values for each condition: empty string for missing data, "V" for home win, "E" for draw
+        default="D"  # away team win
+    )
+    # Normalizes the results DataFrame to ensure consistent formatting and data types.
+    df_results = normalize_df(df_results)
+    # Merge tips with gabarito to compare predictions with actual results
+    df_merged = df_tips.merge(df_results, left_on='nm_cfr', right_on='nm_cfr', how='left')
+    # Calculate points based on the comparison of predicted results with actual results, 
+    # assigning 3 points for a correct home win prediction, 1 point for a correct draw prediction, 
+    # and 0 points for an incorrect prediction or if the game has not been played yet.
+    df_merged["vl_pontucao"] = np.select(
+        [
+            df_merged["result_ref_casa_y"].isna(),  # game not played or missing data
+            ((df_merged["vl_time_casa_x"] == df_merged["vl_time_casa_y"]) & (df_merged["vl_time_fora_x"] == df_merged["vl_time_fora_y"])).fillna(False),   # home team win
+            (df_merged["result_ref_casa_x"] == df_merged["result_ref_casa_y"]).fillna(False),  # draw
+        ],
+        [0, 3, 1],  # values for each condition: empty string for missing data, 3 for home win, 1 for draw
+        default=0  # away team win
+    )
+    # Group by player and sum points to get total score for each player, then rank players based on their scores.
+    df_points = (
+        df_merged
+            .groupby('nm_player', as_index=False)['vl_pontucao'].sum()
+            .sort_values(by='vl_pontucao', ascending=False)
+    )
+    # Assign ranks to players based on their total points, using dense ranking for ties and also a first-come-first-served ranking for tie-breaking.
+    df_points['nr_rank'] = df_points['vl_pontucao'].rank(method='dense', ascending=False).astype(int)
+    df_points['nr_rank_2'] = df_points['vl_pontucao'].rank(method='first', ascending=False).astype(int)
+    # Add the current round number and timestamp of the last update to the DataFrame for tracking purposes.
+    df_points['nr_round'] = round_check
+    df_points['ts_atl'] = pd.Timestamp.now(tz='America/Sao_Paulo')
+
+    return df_points

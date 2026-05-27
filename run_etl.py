@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from cfg.api_credentials import local_oauth_flow
 from etl.read import gsheets_to_df
 from etl.load import df_to_drive_csv
-from etl.transform import normalize_df, tips_processing
+from etl.transform import calculate_points, normalize_df, tips_processing
 
 # Scopes for Google Sheets and Drive
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.file']
@@ -54,8 +54,7 @@ df_mapa_partidas = normalize_df(df_mapa_partidas)
 # The minimum count across all columns gives an indication of how many rounds have been completed.
 round_check = min(df_gabarito.count().to_list())
 
-df_palpites = tips_processing(df_palpites)
+df_palpites_f = tips_processing(df_palpites)
 
-
-# Example usage: save a DataFrame to Google Drive as a CSV file
-df_to_drive_csv(DRIVE_SERVICE, df_palpites, 'saida_teste.csv', folder_id=PROCESSED_FOLDER_ID)
+df_points = calculate_points(df_palpites_f, df_gabarito, round_check)
+print(df_points)
