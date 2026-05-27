@@ -12,7 +12,7 @@ import json
 from dotenv import load_dotenv
 
 from cfg.api_credentials import local_oauth_flow
-from etl.read import gsheets_to_df
+from etl.read import gsheets_to_df, drive_csv_to_df
 from etl.load import df_to_drive_csv
 from etl.transform import calculate_points, normalize_df, tips_processing
 
@@ -38,7 +38,7 @@ creds = local_oauth_flow(OAUTH_TOKEN, SCOPES)
 SHEETS_SERVICE = build('sheets', 'v4', credentials=creds)
 DRIVE_SERVICE = build('drive', 'v3', credentials=creds)
 
-# Example usage: read a range from a spreadsheet into a DataFrame
+# Read data from Google Sheets into pandas DataFrames using the gsheets_to_df function.
 df_palpites = gsheets_to_df(SPREADSHEETS['palpites_fg'], SHEETS_SERVICE)
 df_gabarito = gsheets_to_df(SPREADSHEETS['gabarito_fg'], SHEETS_SERVICE)
 df_id_paises = gsheets_to_df(SPREADSHEETS['id_paises'], SHEETS_SERVICE)
@@ -54,7 +54,14 @@ df_mapa_partidas = normalize_df(df_mapa_partidas)
 # The minimum count across all columns gives an indication of how many rounds have been completed.
 round_check = min(df_gabarito.count().to_list())
 
+# Process the tips DataFrame to calculate predicted results and prepare it for comparison with the actual results.
 df_palpites_f = tips_processing(df_palpites)
 
+# Calculate points for each player based on their predictions and the actual results, 
+# and print the resulting DataFrame with player rankings and scores.
 df_points = calculate_points(df_palpites_f, df_gabarito, round_check)
+
+
 print(df_points)
+
+print(drive_csv_to_df(DRIVE_SERVICE,"1JaB0s0DkVWyjwx_QIR5_b42W0TKZGJ38"))
