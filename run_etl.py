@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from cfg.api_credentials import local_oauth_flow
 from etl.read import gsheets_to_df
 from etl.load import df_to_drive_csv
+from etl.transform import normalize_df, tips_processing
 
 # Scopes for Google Sheets and Drive
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.file']
@@ -24,13 +25,13 @@ load_dotenv(env_path)
 
 # Spreadsheets id and ranges are defined in the .env file as JSON, and loaded into a dictionary for easy access.
 SPREADSHEETS = json.loads(os.getenv("SPREADSHEETS"))
+PROCESSED_FOLDER_ID = os.getenv("PROCESSED_FOLDER_ID")
 
 # Authenticate.
-# Prefer OAuth token from environment;
-creds = None
 OAUTH_TOKEN = os.getenv('OAUTH_TOKEN')
 
-# Credential loading and refreshing logic is encapsulated in the local_oauth_flow function, which will handle both loading from OAUTH_TOKEN and refreshing if necessary.
+# Credential loading and refreshing logic is encapsulated in the local_oauth_flow function, which will handle both loading from OAUTH_TOKEN 
+# and refreshing if necessary.
 creds = local_oauth_flow(OAUTH_TOKEN, SCOPES)
 
 # Build services
@@ -38,8 +39,23 @@ SHEETS_SERVICE = build('sheets', 'v4', credentials=creds)
 DRIVE_SERVICE = build('drive', 'v3', credentials=creds)
 
 # Example usage: read a range from a spreadsheet into a DataFrame
-df = gsheets_to_df(SPREADSHEETS['palpites_fg'], SHEETS_SERVICE)
-print(df.head())
+df_palpites = gsheets_to_df(SPREADSHEETS['palpites_fg'], SHEETS_SERVICE)
+df_gabarito = gsheets_to_df(SPREADSHEETS['gabarito_fg'], SHEETS_SERVICE)
+df_id_paises = gsheets_to_df(SPREADSHEETS['id_paises'], SHEETS_SERVICE)
+df_mapa_partidas = gsheets_to_df(SPREADSHEETS['mapa_partidas_fg'], SHEETS_SERVICE)
+
+# Normalize dataframes
+df_palpites = normalize_df(df_palpites)
+df_gabarito = normalize_df(df_gabarito)
+df_id_paises = normalize_df(df_id_paises)
+df_mapa_partidas = normalize_df(df_mapa_partidas)
+
+# Determine the current round by checking the count of non-empty entries in the gabarito DataFrame, which contains the correct answers for each match. 
+# The minimum count across all columns gives an indication of how many rounds have been completed.
+round_check = min(df_gabarito.count().to_list())
+
+df_palpites = tips_processing(df_palpites)
+
 
 # Example usage: save a DataFrame to Google Drive as a CSV file
-df_to_drive_csv(DRIVE_SERVICE, df, 'saida_teste.csv', folder_id='1K2IfAx1KvJsQmvvMD7wwolXMTPTgtKLt', overwrite=False)
+df_to_drive_csv(DRIVE_SERVICE, df_palpites, 'saida_teste.csv', folder_id=PROCESSED_FOLDER_ID)
