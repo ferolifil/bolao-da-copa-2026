@@ -40,6 +40,11 @@ def gsheets_to_df(sheet, sheets_service) -> pd.DataFrame:
     # - First row becomes column names
     # - Remaining rows become data
     df = pd.DataFrame(data=values[1:], columns=values[0])
+
+    if range.startswith("palpites"):
+        # Extract stage information from the range name and add it as a new column in the DataFrame.
+        df['nm_fase'] = (range.split('_')[1]).split('!')[0]
+
     return df
 
 def drive_csv_to_df(drive_service, file_id: str, encoding: str = "utf-8") -> pd.DataFrame:
@@ -70,3 +75,38 @@ def drive_csv_to_df(drive_service, file_id: str, encoding: str = "utf-8") -> pd.
         print(f"Error reading CSV from Drive (file_id={file_id}): {e}")
         df = pd.DataFrame()
     return df
+
+def check_run_round(round_check: int, drive_service: any, file_id: str, encoding: str = "utf-8") -> bool:
+    """
+    Checks if the current round is new by comparing the round number with the maximum round number found in the ranking_hst.csv stored on Google Drive.
+
+    Parameters
+    ----------
+    round_check : int
+        The current round number, determined by the count of non-empty entries in the gabarito DataFrame.
+    drive_service : googleapiclient.discovery.Resource
+        The Google Drive API service instance, used to read the existing ranking_hst.csv file.
+    file_id : str
+        The ID of the ranking_hst.csv file on Google Drive, which contains the historical rankings and points for each player.
+    encoding : str, optional
+        The file encoding to use when reading the CSV file (default is 'utf-8')
+
+    Returns
+    -------
+    bool
+        True if the file should be updated with the new round's data (i.e., if the current round number is greater than the maximum round number in the existing file),
+        False if the file should not be updated.
+    """
+    # Read the existing ranking_hst.csv file from Google Drive into a DataFrame to check the maximum round number already recorded.
+    df = drive_csv_to_df(drive_service, file_id, encoding)
+    # Compare the current round number with the maximum round number in the existing DataFrame. 
+    # If the current round is greater, it indicates that a new round has been completed and the file should be updated.
+    if round_check > df['nr_round'].max():
+        print("Gravar ranking_hst.csv")
+        return True
+    elif round_check < df['nr_round'].max():
+        print("Round atual é menor que o máximo registrado. Verificar dados.")
+        return False
+    else:
+        print("Arquivo já está atualizado.")
+        return False

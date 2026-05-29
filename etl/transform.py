@@ -55,7 +55,7 @@ def tips_processing(df_tips: pd.DataFrame) -> pd.DataFrame:
     df_tips = df_tips.drop(columns=["Carimbo de data/hora","Deixe uma foto sua aqui", "Campeão", "Vice", "Artilheiro"])
 
     df_tips_gs_pivot = (
-        df_tips.melt(id_vars=["Nome"], var_name="col_jogo", value_name="gols")
+        df_tips.melt(id_vars=["Nome","nm_fase"], var_name="col_jogo", value_name="gols")
         .dropna(subset=["gols"])
     )
 
@@ -75,7 +75,7 @@ def tips_processing(df_tips: pd.DataFrame) -> pd.DataFrame:
     # Unpivot to separate home and away team tips into distinct columns, using a pivot table.
     df_tips_gs_pivot_unpivot = (
         df_tips_gs_pivot.pivot_table(
-            index=["Nome","nm_cfr","nm_time_casa","nm_time_fora"],
+            index=["Nome","nm_cfr","nm_time_casa","nm_time_fora","nm_fase"],
             columns="side",
             values="gols",
             aggfunc="first",
@@ -95,7 +95,7 @@ def tips_processing(df_tips: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Selects
-    df_tips_gs_final = df_tips_gs_pivot_unpivot[['Nome','nm_cfr','nm_time_casa','vl_time_casa','nm_time_fora', 'vl_time_fora','result_ref_casa']]
+    df_tips_gs_final = df_tips_gs_pivot_unpivot[['Nome','nm_fase','nm_cfr','nm_time_casa','vl_time_casa','nm_time_fora', 'vl_time_fora','result_ref_casa']]
     df_tips_gs_final = df_tips_gs_final.rename(columns={'Nome': 'nm_player'})
 
     return normalize_df(df_tips_gs_final)
@@ -136,7 +136,7 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
     # Normalizes the results DataFrame to ensure consistent formatting and data types.
     df_results = normalize_df(df_results)
     # Merge tips with gabarito to compare predictions with actual results
-    df_merged = df_tips.merge(df_results, left_on='nm_cfr', right_on='nm_cfr', how='left')
+    df_merged = df_tips.merge(df_results, left_on=['nm_cfr','nm_fase'], right_on=['nm_cfr','nm_fase'], how='left')
     # Calculate points based on the comparison of predicted results with actual results, 
     # assigning 3 points for a correct home win prediction, 1 point for a correct draw prediction, 
     # and 0 points for an incorrect prediction or if the game has not been played yet.
