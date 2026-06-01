@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from unidecode import unidecode
 
 def normalize_df(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -140,7 +141,7 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
     # Calculate points based on the comparison of predicted results with actual results, 
     # assigning 3 points for a correct home win prediction, 1 point for a correct draw prediction, 
     # and 0 points for an incorrect prediction or if the game has not been played yet.
-    df_merged["vl_pontucao"] = np.select(
+    df_merged["vl_pontuacao"] = np.select(
         [
             df_merged["result_ref_casa_y"].isna(),  # game not played or missing data
             ((df_merged["vl_time_casa_x"] == df_merged["vl_time_casa_y"]) & (df_merged["vl_time_fora_x"] == df_merged["vl_time_fora_y"])).fillna(False),   # home team win
@@ -152,14 +153,210 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
     # Group by player and sum points to get total score for each player, then rank players based on their scores.
     df_points = (
         df_merged
-            .groupby('nm_player', as_index=False)['vl_pontucao'].sum()
-            .sort_values(by='vl_pontucao', ascending=False)
+            .groupby('nm_player', as_index=False)['vl_pontuacao'].sum()
+            .sort_values(by='vl_pontuacao', ascending=False)
     )
     # Assign ranks to players based on their total points, using dense ranking for ties and also a first-come-first-served ranking for tie-breaking.
-    df_points['nr_rank'] = df_points['vl_pontucao'].rank(method='dense', ascending=False).astype(int)
-    df_points['nr_rank_2'] = df_points['vl_pontucao'].rank(method='first', ascending=False).astype(int)
+    df_points['nr_rank'] = df_points['vl_pontuacao'].rank(method='dense', ascending=False).astype(int)
+    df_points['nr_rank_2'] = df_points['vl_pontuacao'].rank(method='first', ascending=False).astype(int)
     # Add the current round number and timestamp of the last update to the DataFrame for tracking purposes.
     df_points['nr_round'] = round_check
     df_points['ts_atl'] = pd.Timestamp.now(tz='America/Sao_Paulo')
 
-    return df_points
+    df_tips_final = df_merged[['nm_player','nm_fase','nm_cfr','nm_time_casa_x', 'vl_time_casa_x', 'nm_time_fora_x', 'vl_time_fora_x', 'vl_pontuacao']]
+    df_tips_final = df_tips_final.rename(columns={"nm_time_casa_x": "nm_time_casa", "nm_time_fora_x": "nm_time_fora", "vl_time_fora_x": "vl_time_fora", "vl_time_casa_x": "vl_time_casa"})
+    df_tips_final['tx_resultado'] = df_tips_final['nm_time_casa'] + " " + df_tips_final['vl_time_casa'].astype(str) + " x " + df_tips_final['vl_time_fora'].astype(str) + " " + df_tips_final['nm_time_fora']
+
+    return df_tips_final, df_points
+
+
+def solve_by_home_away(df: pd.DataFrame, id_h_a: int) -> pd.DataFrame:
+    """
+    Convert prediction rows into a home/away perspective and calculate match points.
+
+    This function renames the prediction columns so that the selected side becomes the team, the
+    opposite side becomes the opponent, and the corresponding goals for/against are aligned
+    accordingly. It then computes match points and result indicators for each row.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame containing match predictions with columns for home/away team names and goals.
+    id_h_a : int
+        Indicator of perspective: 1 for home team perspective, 0 for away team perspective.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Transformed DataFrame with columns [team, opp, gf, ga, pts, v, e, d].
+    """
+    # id_h_a: 1 for home, 0 for away
+    if id_h_a == 1:
+        df_2 = df.rename(columns={
+            "nm_time_casa": "team",
+            "nm_time_fora": "opp",
+            "vl_time_casa": "gf",
+            "vl_time_fora": "ga",
+        })
+    else:
+        df_2 = df.rename(columns={
+            "nm_time_fora": "team",
+            "nm_time_casa": "opp",
+            "vl_time_fora": "gf",
+            "vl_time_casa": "ga",
+        })
+    # Calculate points based on the comparison of predicted results with actual results.
+    df_2["pts"] = np.select(
+        [df_2["gf"] > df_2["ga"], df_2["gf"] == df_2["ga"]],
+        [3, 1],
+        default=0,
+    )
+    df_2["v"] = (df_2["gf"] > df_2["ga"]).astype(int)
+    df_2["e"] = (df_2["gf"] == df_2["ga"]).astype(int)
+    df_2["d"] = (df_2["gf"] < df_2["ga"]).astype(int)
+    return df_2
+
+
+def solve_ties(df_tabela_base: pd.DataFrame, team_rows: pd.DataFrame) -> pd.DataFrame:
+    """
+    Resolve point ties using head-to-head criteria within each player and group.
+
+    This function computes head-to-head points, goals scored, and goals conceded for teams
+    that are tied on total points. It then applies tie-breaking rules using the following
+    order: head-to-head points, head-to-head goal difference, and head-to-head goals scored.
+
+    Parameters
+    ----------
+    df_tabela_base : pandas.DataFrame
+        Aggregated table containing total points for each team within each player and group.
+    team_rows : pandas.DataFrame
+        Detailed row-level home/away results for each team and match.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Tie-breaker DataFrame with columns ['nm_player', 'nm_grpo', 'team', 'rk2'] that can be merged
+        back into the main standings table.
+    """
+    # To solve ties in points, we need to look at the head-to-head results between the tied teams. 
+    # This involves calculating points, goal difference, and goals scored in matches between the tied teams, and then ranking them accordingly.
+
+    # First, we calculate the head-to-head points, goals for, and goals against for each player, 
+    # group, and team by merging the team_rows DataFrame with itself to compare each team's performance against its opponents.
+    h2h = (
+        team_rows
+        .groupby(["nm_player", "nm_grpo", "team", "opp", "gf", "ga"], as_index=False)["pts"]
+        .sum()
+    )
+    # We also need to merge the total points for each team to compare them against their opponents in the head-to-head analysis.
+    tot = df_tabela_base[["nm_player", "nm_grpo", "team", "pts"]].rename(columns={"pts": "total_pts"})
+    h2h = h2h.merge(tot, on=["nm_player", "nm_grpo", "team"])
+    h2h = h2h.merge(
+        tot.rename(columns={"team": "opp", "total_pts": "opp_total_pts"}),
+        on=["nm_player", "nm_grpo", "opp"]
+    )
+    # Filter for tied teams to calculate their head-to-head points, goal difference, and goals scored for tie-breaking.
+    h2h_tied = h2h[h2h["total_pts"] == h2h["opp_total_pts"]]
+    h2h_pts = (
+        h2h_tied
+        .groupby(["nm_player", "nm_grpo", "team"], as_index=False)[["pts", "gf", "ga"]]
+        .sum()
+        .rename(columns={"pts": "h2h_pts", "gf": "h2h_gf", "ga": "h2h_ga"})
+    )
+    h2h_pts["h2h_sg"] = h2h_pts["h2h_gf"] - h2h_pts["h2h_ga"]
+    # To break ties, we create a composite key that includes head-to-head points, head-to-head goal difference, and head-to-head goals scored.
+    # Those are the standard tie-breaking criteria in FWC, applied in order to rank teams that are tied on points.
+    h2h_pts = h2h_pts.assign(
+        tie_key=list(zip(h2h_pts.h2h_pts, h2h_pts.h2h_sg, h2h_pts.h2h_gf))
+    )
+    # Rank teams based on the tie-breaking criteria, with higher head-to-head points, 
+    # then goal difference, then goals scored leading to a better rank.
+    h2h_pts["rk2"] = (
+        h2h_pts
+        .groupby(["nm_player", "nm_grpo"])["tie_key"]
+        .rank(method="dense", ascending=False)
+        .astype(int)
+    )
+    return h2h_pts.drop(columns=["tie_key", "h2h_sg", "h2h_gf", "h2h_ga", "h2h_pts"])
+
+
+def make_base_table(df_tips: pd.DataFrame, df_countries: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build the base standings table from player tips and country lookup data.
+
+    This function merges the normalized tip data with country metadata, computes both home and away
+    results, aggregates team statistics, calculates goal difference, and applies tie-breaking logic
+    to determine final positions within each player group.
+
+    Parameters
+    ----------
+    df_tips : pandas.DataFrame
+        Normalized DataFrame of player predictions with team and goal columns.
+    df_countries : pandas.DataFrame
+        DataFrame containing country names and their corresponding IDs.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Base standings table with team-level statistics and final group positions.
+    """
+    # Create a copy of the tips DataFrame to avoid modifying the original data.
+    df = df_tips.copy()
+    # Create a new column 'nm_pais' that initially takes the value of 'nm_time_casa', which represents the home team in the predictions.
+    df["nm_pais"] = df["nm_time_casa"]
+    # Merge the tips DataFrame with the countries DataFrame to add the country ID (id_pais) based on the country name (nm_pais).
+    df = pd.merge(df, df_countries, on='nm_pais', how='left')
+    df.drop(["nm_pais"], axis=1, inplace=True)
+    df = df.dropna()
+    df['id_pais'] = df['id_pais'].astype(int)
+    # Home and away results are calculated separately to account for the different perspectives of the predictions, 
+    # and then concatenated together for aggregation.
+    home = solve_by_home_away(df, 1)
+    away = solve_by_home_away(df, 0)
+    # Concatenate home and away results into a single DataFrame for aggregation.
+    team_rows = pd.concat([home, away], ignore_index=True)
+    # Aggregate points, wins, draws, losses, goals for, and goals against for each player, group, and team.
+    df = (
+        team_rows
+        .groupby(["nm_player", "nm_grpo", "team"], as_index=False)
+        .agg(
+            pts=("pts", "sum"),
+            jogos=("team", "size"),
+            v=("v", "sum"),
+            e=("e", "sum"),
+            d=("d", "sum"),
+            gp=("gf", "sum"),
+            gc=("ga", "sum"),
+        )
+    )
+    # Calculate goal difference (sg) as goals for (gp) minus goals against (gc).
+    df["sg"] = df["gp"] - df["gc"]
+    df['rk'] = df.groupby(['nm_player','nm_grpo'])['pts'].rank(method='max', ascending=False).astype(int)
+    # To solve ties in points, we need to look at the head-to-head results between the tied teams. 
+    # This involves calculating points, goal difference, and goals scored in matches between the tied teams
+    df_ties = solve_ties(df, team_rows)
+    # Merge the tie-breaking information back into the main DataFrame to adjust the rankings 
+    # based on head-to-head criteria, and prepare for final ranking.    
+    df = df.merge(df_ties, on=["nm_player", "nm_grpo", "team"], how="left").fillna(0)
+    # Upper case and remove accents from team names to ensure consistent formatting for 
+    # alphabetical ordering (least important criteria).
+    df['nm_pais_ajst'] = df['team'].apply(lambda x: unidecode(x).upper())
+    # Create a composite key for tie-breaking that includes the original rank, the head-to-head rank, and the adjusted team name for alphabetical ordering.
+    df = df.assign(
+        tie_key=list(zip(
+            df["rk"],
+            df["rk2"],
+            -df["sg"],  # higher goal difference should be better
+            -df["gp"],  # higher goals scored should be better
+            df["nm_pais_ajst"],
+        ))
+    )
+    # Rank finally.
+    df["pos"] = (
+        df
+        .groupby(["nm_player", "nm_grpo"])["tie_key"]
+        .rank(method="dense", ascending=True)
+        .astype(int)
+    )
+    # Drop intermediate columns used for tie-breaking and sorting, and return the final DataFrame sorted by group and position.
+    return df.drop(columns=["tie_key", "rk", "rk2", "nm_pais_ajst"]).sort_values(['nm_player','nm_grpo','pos'], ascending=[True,True,True])
