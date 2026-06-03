@@ -13,11 +13,14 @@ from dotenv import load_dotenv
 # Local imports
 from cfg.api_credentials import local_oauth_flow
 from etl.extract import gsheets_to_df, check_run_round, drive_csv_to_df
-from etl.load import df_to_drive_csv
+from etl.load import df_to_drive_csv, df_to_gsheet
 from etl.transform import calculate_points, normalize_df, tips_processing, make_base_table
 
 # Scopes for Google Sheets and Drive
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.file']
+SCOPES = [
+'https://www.googleapis.com/auth/spreadsheets',
+'https://www.googleapis.com/auth/drive'
+]
 # NOTE: the notebook may run with cwd in /etl, so load .env from the project root if needed.
 env_path = os.path.join(os.getcwd(), '.env')
 load_dotenv(env_path)
@@ -65,4 +68,8 @@ df_to_drive_csv(DRIVE_SERVICE, df_base_table, 'tabela_base_fg.csv', PROCESSED_FO
 
 
 
+df_to_gsheet(SHEETS_SERVICE, df_base_table, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "tabela_base_fg", overwrite=True, include_header=True)
 
+df_to_gsheet(SHEETS_SERVICE, df_palpites_csv, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "palpites", overwrite=True, include_header=True)
+
+df_to_gsheet(SHEETS_SERVICE, df_points, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "ranking_hst", overwrite=False, include_header=False)

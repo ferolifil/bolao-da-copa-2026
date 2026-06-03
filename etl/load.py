@@ -91,3 +91,61 @@ def df_to_drive_csv(drive_service, df, filename, folder_id=None, overwrite=False
     ).execute()
 
     return created_file.get('id')
+
+
+def df_to_gsheet(sheets_service, df, spreadsheet_id, sheet_name, overwrite=False, include_header=True) -> dict:
+    """
+    Save a pandas DataFrame into a Google Sheets worksheet.
+
+    If overwrite is True, the function replaces the contents of the target sheet range with the DataFrame.
+    If overwrite is False, the function appends the DataFrame rows to the end of the worksheet.
+
+    Parameters
+    ----------
+    sheets_service : googleapiclient.discovery.Resource
+        The Google Sheets API service instance.
+    df : pandas.DataFrame
+        The DataFrame to save.
+    spreadsheet_id : str
+        The ID of the Google Sheets document.
+    sheet_name : str
+        The name of the worksheet/tab where the data should be written.
+    overwrite : bool, default False
+        If True, overwrite the existing data in the sheet. If False, append rows to the end.
+    include_header : bool, default True
+        Whether to include the DataFrame header row in the written values. For append mode,
+        set this to False if the sheet already has a header row.
+
+    Returns
+    -------
+    dict
+        The API response from the Sheets insert/update operation.
+    """
+    values = []
+    if include_header:
+        values.append(list(df.columns))
+
+    if not df.empty:
+        data_rows = df.fillna('').astype(str).values.tolist()
+        values.extend(data_rows)
+
+    body = {'values': values}
+
+    if overwrite:
+        range_name = f"{sheet_name}!A1"
+        response = sheets_service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=range_name,
+            valueInputOption='RAW',
+            body=body
+        ).execute()
+    else:
+        response = sheets_service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range=sheet_name,
+            valueInputOption='RAW',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+
+    return response
