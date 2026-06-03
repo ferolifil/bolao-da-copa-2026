@@ -147,12 +147,14 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
             ((df_merged["vl_time_casa_x"] == df_merged["vl_time_casa_y"]) & (df_merged["vl_time_fora_x"] == df_merged["vl_time_fora_y"])).fillna(False),   # home team win
             (df_merged["result_ref_casa_x"] == df_merged["result_ref_casa_y"]).fillna(False),  # draw
         ],
-        [0, 3, 1],  # values for each condition: empty string for missing data, 3 for home win, 1 for draw
+        [None, 3, 1],  # values for each condition: empty string for missing data, 3 for home win, 1 for draw
         default=0  # away team win
     )
     # Group by player and sum points to get total score for each player, then rank players based on their scores.
+    df_merged_2 = df_merged.copy()
+    df_merged_2['vl_pontuacao'] = df_merged_2['vl_pontuacao'].fillna(0).astype(int)
     df_points = (
-        df_merged
+        df_merged_2
             .groupby('nm_player', as_index=False)['vl_pontuacao'].sum()
             .sort_values(by='vl_pontuacao', ascending=False)
     )

@@ -60,7 +60,7 @@ if check_run_round(round_check, DRIVE_SERVICE, "1kYkENHRLwAvLiPGGamikFDzifR5KYRz
     df_to_drive_csv(DRIVE_SERVICE, df_points, 'ranking_hst.csv', PROCESSED_FOLDER_ID, overwrite=False)
 
 
-df_palpites_csv = drive_csv_to_df(DRIVE_SERVICE, "1PIoax4mu5lwsWHNH4kneefyIS2I0r6H-")
+# df_palpites_csv = drive_csv_to_df(DRIVE_SERVICE, "1PIoax4mu5lwsWHNH4kneefyIS2I0r6H-")
 
 df_base_table = make_base_table(df_palpites_t, df_paises)
 
@@ -70,6 +70,6 @@ df_to_drive_csv(DRIVE_SERVICE, df_base_table, 'tabela_base_fg.csv', PROCESSED_FO
 
 df_to_gsheet(SHEETS_SERVICE, df_base_table, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "tabela_base_fg", overwrite=True, include_header=True)
 
-df_to_gsheet(SHEETS_SERVICE, df_palpites_csv, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "palpites", overwrite=True, include_header=True)
+df_to_gsheet(SHEETS_SERVICE, df_palpites_final, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "palpites", overwrite=True, include_header=True)
 
 df_to_gsheet(SHEETS_SERVICE, df_points, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "ranking_hst", overwrite=False, include_header=False)
