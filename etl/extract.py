@@ -1,5 +1,6 @@
 import pandas as pd
 import io
+import gspread
 
 def gsheets_to_df(sheet, sheets_service) -> pd.DataFrame:
     """
@@ -110,3 +111,31 @@ def check_run_round(round_check: int, drive_service: any, file_id: str, encoding
     else:
         print("Arquivo já está atualizado.")
         return False
+    
+def gsheets_to_df_2(creds, sheet_id, tab_name) -> pd.DataFrame:
+    """
+    Reads data from a Google Sheets range and returns it as a pandas DataFrame.
+
+    Parameters
+    ----------
+    creds : google.oauth2.credentials.Credentials
+        The authenticated credentials to access the Google Sheets API.
+    sheet_id : str
+        The ID of the Google Sheets document.
+    tab_name : str
+        The name of the worksheet/tab to read from.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the sheet data, where the first row is used as column headers.
+        If no data is found, an empty DataFrame is returned.
+    """
+    # Initialize the gspread client using the provided credentials
+    client = gspread.authorize(creds)
+    # Open the specified Google Sheets document and worksheet/tab.
+    sheet = client.open_by_key(sheet_id)
+    tab = sheet.worksheet(tab_name)
+    # Fetch all records and convert them into a DataFrame.
+    data = tab.get_all_records()
+    return pd.DataFrame(data)

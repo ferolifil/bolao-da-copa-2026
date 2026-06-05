@@ -41,3 +41,37 @@ def local_oauth_flow(oauth_token, scopes) -> Credentials:
             raise SystemExit('Credentials are invalid and cannot be refreshed. Please re-authenticate.')
 
     return creds
+
+
+def service_account_flow(service_account_info, scopes) -> Credentials:
+    """
+    Performs the OAuth 2.0 flow using a service account to obtain credentials for Google APIs.
+
+    This function loads service account credentials from a specified JSON file and returns an instance of
+    google.oauth2.service_account.Credentials that can be used to authenticate API requests.
+
+    Parameters
+    ----------
+    service_account_info : str
+        The JSON string containing the service account credentials.
+    scopes : list
+        A list of scopes that specify the level of access requested for the credentials.
+
+    Returns
+    -------
+    Credentials
+        An instance of google.oauth2.service_account.Credentials containing the authenticated service account credentials.
+
+    Raises
+    ------
+    SystemExit
+        If there is an error loading the service account credentials or if the file is not found.
+    """
+    try:
+        creds = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=scopes
+        )
+        return creds
+    except Exception as exc:
+        raise SystemExit(f'Failed to load service account credentials: {exc}')

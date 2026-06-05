@@ -11,7 +11,7 @@ import os.path
 import json
 from dotenv import load_dotenv
 # Local imports
-from cfg.api_credentials import local_oauth_flow
+from cfg.api_credentials import service_account_flow
 from etl.extract import gsheets_to_df, check_run_round, drive_csv_to_df
 from etl.load import df_to_drive_csv, df_to_gsheet
 from etl.transform import calculate_points, normalize_df, tips_processing, make_base_table
@@ -28,10 +28,10 @@ load_dotenv(env_path)
 SPREADSHEETS = json.loads(os.getenv("SPREADSHEETS"))
 PROCESSED_FOLDER_ID = os.getenv("PROCESSED_FOLDER_ID")
 # Authenticate.
-OAUTH_TOKEN = os.getenv('OAUTH_TOKEN')
-# Credential loading and refreshing logic is encapsulated in the local_oauth_flow function, which will handle both loading from OAUTH_TOKEN 
+service_account_info = json.loads(os.getenv('GOOGLE_SERVICE_ACCOUNT'))
+# Credential loading and refreshing logic is encapsulated in the service_account_flow function, which will handle both loading from the service account info
 # and refreshing if necessary.
-creds = local_oauth_flow(OAUTH_TOKEN, SCOPES)
+creds = service_account_flow(service_account_info, SCOPES)
 # Build services
 SHEETS_SERVICE = build('sheets', 'v4', credentials=creds)
 DRIVE_SERVICE = build('drive', 'v3', credentials=creds)
