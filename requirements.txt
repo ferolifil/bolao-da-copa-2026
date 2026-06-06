@@ -1,7 +1,8 @@
-google-api-python-client
-python-dotenv
-google-auth
-google-auth-oauthlib
-pandas
-numpy
-unidecode
+google-api-python-client==2.196.0
+gspread==6.2.1
+google-auth==2.53.0
+google-auth-oauthlib==1.4.0
+python-dotenv==1.2.2
+pandas==3.0.3
+numpy==2.4.6
+Unidecode==1.4.0

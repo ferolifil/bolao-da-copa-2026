@@ -1,42 +1,90 @@
 # Bolao da Copa 2026 - ETL
 
-ETL em Python/pandas para processar palpites e gabaritos do bolao:
-- Entrada: planilhas Excel em `data/raw/`
-  - `1 - palpites.xlsx`: aba `palpites_fg` com palpites wide (uma coluna por time em cada partida).
-  - `2 - gabarito.xlsx`: aba `gabarito_fg` com placares reais e IDs de partidas.
-  - `3 - apoio.xlsx`: aba `partidas_fg` (mapa de partidas: `id_cfr`, `nm_cfr`, times casa/fora) e `paises`/demais tabelas auxiliares.
-- Saidas em `data/processed/` (ignoradas no Git):
-  - `palpites_processados.csv` / `palpites__fg_processados.csv`: palpites em formato tidy com `nome_participante`, `id_partida`, `vl_casa`, `vl_fora`, `resultado` (V/E/D do mandante).
-  - `gabaritos_fg_processados.csv`: gabarito da fase de grupos, normalizado com times casa/fora e placares.
-  - `apoio_mapa_partidas_fg.csv`: mapa de partidas da fase de grupos.
-  - `apoio_times.csv`: dicionario de times/ajustes.
+Pipeline ETL em Python para processar palpites, gabaritos e gerar rankings do bolão.
 
-## Transformacao (wide -> long)
-Palpites (ver `etl/dev.ipynb`):
-1) `melt` do `palpites_fg` para ter uma linha por participante x partida.
-2) Regex para separar nomes:
-   - Partida: `nm_cfr` = texto antes de `[` em `col_jogo`.
-   - Times: captura casa/fora em `col_jogo` (ex.: `^(.*?) x (.*?) \\[`).
-   - Time da coluna: texto entre `[` e `]`.
-3) Normalizacao (strip/upper) e join com `partidas_fg` para obter `id_cfr`, `nm_time_casa`, `nm_time_fora`.
-4) Pivot para colunas finais e derivacao de `resultado` via comparacao `vl_casa` vs `vl_fora`.
+## Visão geral
 
-Gabarito (ver `etl/etl_gabarito.ipynb`):
-- Normalizacao do `gabarito_fg` com ids/nomes de partidas e times casa/fora.
-- Export de tabelas auxiliares (`apoio_mapa_partidas_fg.csv`, `apoio_times.csv`) para cruzamentos.
+O projeto automatiza o fluxo de dados do bolão:
+- Lê palpites e resultados via Google Sheets ou arquivos locais.
+- Normaliza palpites de formato "wide" para formato "long".
+- Calcula pontuação e rankings por rodada.
+- Atualiza planilhas do Google Sheets com os resultados processados.
 
-## Estrutura
-- `etl/dev.ipynb`: ETL dos palpites (wide -> long + resultado).
-- `etl/etl_gabarito.ipynb`: ETL do gabarito e tabelas de apoio.
-- `data/raw/`: dados de entrada (ignorado no Git).
-- `data/processed/`: saidas geradas (ignorado no Git).
+## Instalação
 
-## Por que ignorar .xlsx/.csv
-Arquivos binarios/dados brutos nao entram no Git para evitar inchar o historico, expor dados e dificultar diff. Use `.gitignore` para manter apenas codigo e instrucoes de obtencao dos dados.
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
 
-## Proximos passos
-- Ordenacao dos grupos ja esta implementada (pts > confronto direto > sg > gp > nome do pais).
-- Definir e implementar a regra de melhores terceiros colocados entre os grupos.
-- Consolidar pontuacao com `gabarito_fg` e gerar ranking.
-- Validar nomes de times com `paises` e mapear aliases.
-- Preparar leitura de GSheets e workflow do GitHub Actions com `cron`.
+## Configuração
+
+Crie um arquivo `.env` na raiz do projeto com as variáveis necessárias:
+
+```bash
+INPUT_SPREADSHEETS='{"palpites":"...","gabarito":"...","id_paises":"...","mapa_partidas_fg":"..."}'
+OUTPUT_SPREADSHEETS="..."
+GOOGLE_SERVICE_ACCOUNT='{"type":"service_account", ... }'
+```
+
+### Observações
+
+- `GOOGLE_SERVICE_ACCOUNT` deve conter o JSON do service account do Google em uma única linha.
+- `OUTPUT_SPREADSHEETS` costuma ser o ID da planilha de destino.
+- `PROCESSED_FOLDER_ID` é a pasta do Google Drive onde os CSV gerados podem ser salvos.
+
+## Execução
+
+```bash
+python main.py
+```
+
+## Estrutura do projeto
+
+- `main.py` — fluxo principal de ETL com Google Sheets, normalização e upload.
+- `cfg/api_credentials.py` — autenticação de service account para Google APIs.
+- `etl/extract.py` — leitura de Google Sheets e CSVs.
+- `etl/transform.py` — lógica de transformação e cálculo de rankings.
+- `etl/load.py` — escrita em Google Sheets/Drive.
+- `data/raw/` — entrada local de dados.
+- `data/processed/` — saída gerada pelo ETL.
+- `notebooks/` — notebooks de exploração e ETL.
+
+## Fluxo de transformação
+
+1. Lê palpites em formato wide.
+2. Usa `melt` para transformar em long.
+3. Separa nomes de partidas e times com regex.
+4. Normaliza dados e faz joins com tabelas de apoio.
+5. Calcula resultados, pontos e rankings.
+
+## Requisitos
+
+```bash
+pip install -r requirements.txt
+```
+
+Pacotes principais:
+
+- `google-api-python-client`
+- `gspread`
+- `google-auth`
+- `google-auth-oauthlib`
+- `python-dotenv`
+- `pandas`
+- `numpy`
+- `Unidecode`
+
+## Boas práticas
+
+- Não versionar credenciais nem arquivos de dados brutos.
+- Use `.env` para variáveis sensíveis.
+- Mantenha `data/processed/` limpo para evitar commits de CSVs gerados.
+
+## Próximos passos
+
+- Finalizar regra de melhores terceiros colocados.
+- Consolidar o ranking histórico por rodada.
+- Adicionar validação de nomes de times e aliases.
+- Automatizar com GitHub Actions / cron.
