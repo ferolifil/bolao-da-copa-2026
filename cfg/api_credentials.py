@@ -1,5 +1,5 @@
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+from google.oauth2.service_account import Credentials
 import json
 
 def local_oauth_flow(oauth_token, scopes) -> Credentials:

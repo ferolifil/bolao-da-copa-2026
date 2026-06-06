@@ -2,7 +2,7 @@ import pandas as pd
 import io
 import gspread
 
-def gsheets_to_df(sheet, sheets_service) -> pd.DataFrame:
+def gsheets_to_df_old(sheet, sheets_service) -> pd.DataFrame:
     """
     Reads data from a Google Sheets range and returns it as a pandas DataFrame.
 
@@ -44,7 +44,7 @@ def gsheets_to_df(sheet, sheets_service) -> pd.DataFrame:
 
     if range.startswith("palpites"):
         # Extract stage information from the range name and add it as a new column in the DataFrame.
-        df['nm_fase'] = (range.split('_')[1]).split('!')[0]
+        df['nm_fase'] = range.split('_')[1]
 
     return df
 
@@ -77,42 +77,8 @@ def drive_csv_to_df(drive_service, file_id: str, encoding: str = "utf-8") -> pd.
         df = pd.DataFrame()
     return df
 
-def check_run_round(round_check: int, drive_service: any, file_id: str, encoding: str = "utf-8") -> bool:
-    """
-    Checks if the current round is new by comparing the round number with the maximum round number found in the ranking_hst.csv stored on Google Drive.
-
-    Parameters
-    ----------
-    round_check : int
-        The current round number, determined by the count of non-empty entries in the gabarito DataFrame.
-    drive_service : googleapiclient.discovery.Resource
-        The Google Drive API service instance, used to read the existing ranking_hst.csv file.
-    file_id : str
-        The ID of the ranking_hst.csv file on Google Drive, which contains the historical rankings and points for each player.
-    encoding : str, optional
-        The file encoding to use when reading the CSV file (default is 'utf-8')
-
-    Returns
-    -------
-    bool
-        True if the file should be updated with the new round's data (i.e., if the current round number is greater than the maximum round number in the existing file),
-        False if the file should not be updated.
-    """
-    # Read the existing ranking_hst.csv file from Google Drive into a DataFrame to check the maximum round number already recorded.
-    df = drive_csv_to_df(drive_service, file_id, encoding)
-    # Compare the current round number with the maximum round number in the existing DataFrame. 
-    # If the current round is greater, it indicates that a new round has been completed and the file should be updated.
-    if round_check > df['nr_round'].max():
-        print("Gravar ranking_hst.csv")
-        return True
-    elif round_check < df['nr_round'].max():
-        print("Round atual é menor que o máximo registrado. Verificar dados.")
-        return False
-    else:
-        print("Arquivo já está atualizado.")
-        return False
     
-def gsheets_to_df_2(creds, sheet_id, tab_name) -> pd.DataFrame:
+def gsheets_to_df(creds: any, sheets_var: list) -> pd.DataFrame:
     """
     Reads data from a Google Sheets range and returns it as a pandas DataFrame.
 
@@ -120,8 +86,8 @@ def gsheets_to_df_2(creds, sheet_id, tab_name) -> pd.DataFrame:
     ----------
     creds : google.oauth2.credentials.Credentials
         The authenticated credentials to access the Google Sheets API.
-    sheet_id : str
-        The ID of the Google Sheets document.
+    sheets_var : list
+        A list containing the sheet ID and tab name.
     tab_name : str
         The name of the worksheet/tab to read from.
 
@@ -131,6 +97,9 @@ def gsheets_to_df_2(creds, sheet_id, tab_name) -> pd.DataFrame:
         A DataFrame containing the sheet data, where the first row is used as column headers.
         If no data is found, an empty DataFrame is returned.
     """
+    # Unpack sheet configuration
+    sheet_id = sheets_var[0]
+    tab_name = sheets_var[1]
     # Initialize the gspread client using the provided credentials
     client = gspread.authorize(creds)
     # Open the specified Google Sheets document and worksheet/tab.
@@ -138,4 +107,45 @@ def gsheets_to_df_2(creds, sheet_id, tab_name) -> pd.DataFrame:
     tab = sheet.worksheet(tab_name)
     # Fetch all records and convert them into a DataFrame.
     data = tab.get_all_records()
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    if tab_name.startswith("palpites"):
+        # Extract stage information from the range name and add it as a new column in the DataFrame.
+        df['nm_fase'] = tab_name.split('_')[1]
+    
+    return df
+
+def check_run_round(round_check: int, creds: any, sheets_var: list) -> bool:
+    """
+    Checks if the current round is new by comparing the round number with the maximum round number found in the ranking_hst.csv stored on Google Drive.
+
+    Parameters
+    ----------
+    round_check : int
+        The current round number, determined by the count of non-empty entries in the gabarito DataFrame.
+    creds : google.oauth2.credentials.Credentials
+        The authenticated credentials to access the Google Sheets API.
+    sheets_var : list
+        A list containing the sheet ID and tab name for the ranking_hst tab.
+
+    Returns
+    -------
+    bool
+        True if the file should be updated with the new round's data (i.e., if the current round number is greater than the maximum round number in the existing file),
+        False if the file should not be updated.
+    """
+    # Read the existing ranking_hst.csv file from Google Drive into a DataFrame to check the maximum round number already recorded.
+    df = gsheets_to_df(creds, sheets_var)
+    # Compare the current round number with the maximum round number in the existing DataFrame. 
+    # If the current round is greater, it indicates that a new round has been completed and the file should be updated.
+    if df.empty:
+        print("Gravar ranking_hst atualizado.")
+        return True
+    if round_check > df['nr_round'].max():
+        print("Gravar ranking_hst atualizado.")
+        return True
+    elif round_check < df['nr_round'].max():
+        print("Round atual é menor que o máximo registrado. Verificar dados.")
+        return False
+    else:
+        print("Arquivo já está atualizado.")
+        return False

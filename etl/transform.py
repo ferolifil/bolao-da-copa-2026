@@ -155,7 +155,7 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
     df_merged_2['vl_pontuacao'] = df_merged_2['vl_pontuacao'].fillna(0).astype(int)
     df_points = (
         df_merged_2
-            .groupby('nm_player', as_index=False)['vl_pontuacao'].sum()
+            .groupby(['nm_player','nm_fase'], as_index=False)['vl_pontuacao'].sum()
             .sort_values(by='vl_pontuacao', ascending=False)
     )
     # Assign ranks to players based on their total points, using dense ranking for ties and also a first-come-first-served ranking for tie-breaking.
@@ -362,3 +362,61 @@ def make_base_table(df_tips: pd.DataFrame, df_countries: pd.DataFrame) -> pd.Dat
     )
     # Drop intermediate columns used for tie-breaking and sorting, and return the final DataFrame sorted by group and position.
     return df.drop(columns=["tie_key", "rk", "rk2", "nm_pais_ajst"]).sort_values(['nm_player','nm_grpo','pos'], ascending=[True,True,True])
+
+def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.DataFrame:
+    """
+    Calculate final ranking with rank changes between consecutive rounds.
+
+    This function compares player rankings between the previous round and the current round,
+    calculating rank differences and movements. For the first round, it returns the ranking as-is.
+    For subsequent rounds, it merges the previous round ranking with the current round ranking,
+    calculates the rank gap, and creates a formatted text representation of the rank movement
+    (improvement, decline, or no change).
+
+    Parameters
+    ----------
+    df_ranking_hst : pandas.DataFrame
+        Historical ranking DataFrame containing rankings from multiple rounds with columns
+        including 'nm_player', 'nm_fase', 'vl_pontuacao', 'nr_rank', 'nr_rank_2', 'nr_round',
+        and 'ts_atl'.
+    round_check : int
+        The current round number being evaluated.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Final ranking DataFrame with columns ['nm_player', 'nm_fase', 'vl_pontuacao', 'nr_rank',
+        'nr_rank_2', 'nr_round', 'rk_gap', 'tx_gap', 'ts_atl']. The 'rk_gap' column contains
+        the numeric rank difference (positive = improved rank, negative = declined rank),
+        and 'tx_gap' contains the formatted text representation of the movement.
+    """
+    # Create a copy of the historical ranking DataFrame to avoid modifying the original data.
+    df = df_ranking_hst.copy()
+    # If the DataFrame is empty, return it as-is. If the current round is greater than 1, 
+    # calculate rank changes by merging the previous round's ranking with the current round's ranking.
+    if df.empty:
+        return df
+    elif round_check > 1:
+        # Filter the DataFrame to get the previous round's ranking and the current round's ranking, then merge them on player name and phase.
+        round_prev = df[df['nr_round'] != round_check]['nr_round'].max()
+        df_1 = df[df['nr_round'] == round_prev]
+        df_2 = df[df['nr_round'] == round_check]
+
+        df_merged = pd.merge(df_1, df_2, on=['nm_player','nm_fase'], how='outer', suffixes=('_prev', '_curr'))
+        df_merged['rk_gap'] = df_merged['nr_rank_prev'].fillna(0).astype(int) - df_merged['nr_rank_curr'].fillna(0).astype(int)
+
+        df_merged["tx_gap"] = np.select(
+            [
+            df_merged['rk_gap'] > 0,
+            df_merged['rk_gap'] < 0
+        ],
+        [
+            "+" + df_merged['rk_gap'].astype(str),
+            df_merged['rk_gap'].astype(str)
+        ],
+        default="-"
+        )
+        # Rename columns to have consistent names for the current round and select the final columns for the ranking table.
+        df_merged = df_merged.rename(columns={'nr_rank_curr': 'nr_rank', 'vl_pontuacao_curr': 'vl_pontuacao','nr_rank_2_curr': 'nr_rank_2','nr_round_curr': 'nr_round','ts_atl_curr': 'ts_atl'})
+        df_merged = df_merged[['nm_player','nm_fase','vl_pontuacao','nr_rank','nr_rank_2','nr_round','rk_gap','tx_gap','ts_atl']]
+        return df_merged

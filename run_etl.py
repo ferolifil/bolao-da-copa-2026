@@ -5,16 +5,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
-import io
 import os
 import os.path
 import json
 from dotenv import load_dotenv
 # Local imports
 from cfg.api_credentials import service_account_flow
-from etl.extract import gsheets_to_df, check_run_round, drive_csv_to_df
-from etl.load import df_to_drive_csv, df_to_gsheet
-from etl.transform import calculate_points, normalize_df, tips_processing, make_base_table
+from etl.extract import gsheets_to_df, check_run_round
+from etl.load import df_to_gsheet
+from etl.transform import calculate_points, normalize_df, tips_processing, make_base_table, make_ranking_final
 
 # Scopes for Google Sheets and Drive
 SCOPES = [
@@ -25,8 +24,10 @@ SCOPES = [
 env_path = os.path.join(os.getcwd(), '.env')
 load_dotenv(env_path)
 # Spreadsheets id and ranges are defined in the .env file as JSON, and loaded into a dictionary for easy access.
-SPREADSHEETS = json.loads(os.getenv("SPREADSHEETS"))
-PROCESSED_FOLDER_ID = os.getenv("PROCESSED_FOLDER_ID")
+# SPREADSHEETS = json.loads(os.getenv("SPREADSHEETS"))
+INPUT_SPREADSHEETS = json.loads(os.getenv("INPUT_SPREADSHEETS"))
+OUTPUT_SPREADSHEETS = os.getenv("OUTPUT_SPREADSHEETS")
+# PROCESSED_FOLDER_ID = os.getenv("PROCESSED_FOLDER_ID")
 # Authenticate.
 service_account_info = json.loads(os.getenv('GOOGLE_SERVICE_ACCOUNT'))
 # Credential loading and refreshing logic is encapsulated in the service_account_flow function, which will handle both loading from the service account info
@@ -36,10 +37,10 @@ creds = service_account_flow(service_account_info, SCOPES)
 SHEETS_SERVICE = build('sheets', 'v4', credentials=creds)
 DRIVE_SERVICE = build('drive', 'v3', credentials=creds)
 # Read data from Google Sheets into pandas DataFrames using the gsheets_to_df function.
-df_palpites = gsheets_to_df(SPREADSHEETS['palpites_fg'], SHEETS_SERVICE)
-df_gabarito = gsheets_to_df(SPREADSHEETS['gabarito'], SHEETS_SERVICE)
-df_paises = gsheets_to_df(SPREADSHEETS['id_paises'], SHEETS_SERVICE)
-df_mapa_partidas = gsheets_to_df(SPREADSHEETS['mapa_partidas_fg'], SHEETS_SERVICE)
+df_palpites = gsheets_to_df(creds, INPUT_SPREADSHEETS['palpites_fg'])
+df_gabarito = gsheets_to_df(creds,INPUT_SPREADSHEETS['gabarito'])
+df_paises = gsheets_to_df(creds, INPUT_SPREADSHEETS['id_paises'])
+df_mapa_partidas = gsheets_to_df(creds, INPUT_SPREADSHEETS['mapa_partidas_fg'])
 # Normalize dataframes
 df_palpites = normalize_df(df_palpites)
 df_gabarito = normalize_df(df_gabarito)
@@ -53,23 +54,17 @@ df_palpites_t = tips_processing(df_palpites)
 # Calculate points for each player based on their predictions and the actual results, 
 # and print the resulting DataFrame with player rankings and scores.
 df_palpites_final, df_points = calculate_points(df_palpites_t, df_gabarito, round_check)
-# Load DataFrame to Google Drive as a CSV file using the df_to_drive_csv function
-
-df_to_drive_csv(DRIVE_SERVICE, df_palpites_final, 'palpites.csv', PROCESSED_FOLDER_ID, overwrite=True)
-if check_run_round(round_check, DRIVE_SERVICE, "1kYkENHRLwAvLiPGGamikFDzifR5KYRzh"):
-    df_to_drive_csv(DRIVE_SERVICE, df_points, 'ranking_hst.csv', PROCESSED_FOLDER_ID, overwrite=False)
-
-
-# df_palpites_csv = drive_csv_to_df(DRIVE_SERVICE, "1PIoax4mu5lwsWHNH4kneefyIS2I0r6H-")
-
+# Create the group stage base table for each player.
 df_base_table = make_base_table(df_palpites_t, df_paises)
-
-df_to_drive_csv(DRIVE_SERVICE, df_base_table, 'tabela_base_fg.csv', PROCESSED_FOLDER_ID, overwrite=True)
-
-
-
-df_to_gsheet(SHEETS_SERVICE, df_base_table, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "tabela_base_fg", overwrite=True, include_header=True)
-
-df_to_gsheet(SHEETS_SERVICE, df_palpites_final, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "palpites", overwrite=True, include_header=True)
-
-df_to_gsheet(SHEETS_SERVICE, df_points, "1zH--PpJw0inUkOcS8y-om5Ye4W1zYRwNzHYQDYDa1BM", "ranking_hst", overwrite=False, include_header=False)
+# Load DataFrame to GoogleSheets. The df_to_gsheet function is used to write the DataFrame to a specified sheet in the output spreadsheet.
+# Tips
+df_to_gsheet(SHEETS_SERVICE, df_palpites_final, OUTPUT_SPREADSHEETS, "palpites", overwrite=True, include_header=True)
+# Ranking History
+if check_run_round(round_check, creds, [OUTPUT_SPREADSHEETS, "ranking_hst"]):
+    df_to_gsheet(SHEETS_SERVICE, df_points, OUTPUT_SPREADSHEETS, "ranking_hst", overwrite=False, include_header=False)
+# Group Stage Base Table
+df_to_gsheet(SHEETS_SERVICE, df_base_table, OUTPUT_SPREADSHEETS, "tabela_base_fg", overwrite=True, include_header=True)
+# Make the final ranking table by merging the points with the player information, and write it to the "ranking_final" sheet in the output spreadsheet.
+df_rk = gsheets_to_df(creds, [OUTPUT_SPREADSHEETS, "ranking_hst"])
+df_ranking_final = make_ranking_final(df_rk,round_check)
+df_to_gsheet(SHEETS_SERVICE, df_ranking_final, OUTPUT_SPREADSHEETS, "ranking_final", overwrite=True, include_header=True)
