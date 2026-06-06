@@ -16,4 +16,4 @@ token.json
 validar_credenciais.ipynb
 validar_creds.py
 run_ci.bat
-run_etl.py
+run_etl OLD.py
