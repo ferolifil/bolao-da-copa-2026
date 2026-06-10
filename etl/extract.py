@@ -137,7 +137,7 @@ def check_run_round(round_check: int, creds: any, sheets_var: list) -> bool:
     df = gsheets_to_df(creds, sheets_var)
     # Compare the current round number with the maximum round number in the existing DataFrame. 
     # If the current round is greater, it indicates that a new round has been completed and the file should be updated.
-    if df.empty:
+    if df.empty and round_check == 0:
         print("Gravar ranking_hst atualizado.")
         return True
     if round_check > df['nr_round'].max():

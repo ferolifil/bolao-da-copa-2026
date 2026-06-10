@@ -304,6 +304,7 @@ def make_base_table(df_tips: pd.DataFrame, df_countries: pd.DataFrame) -> pd.Dat
     """
     # Create a copy of the tips DataFrame to avoid modifying the original data.
     df = df_tips.copy()
+    df = df[df["nm_fase"] == "fg"]
     # Create a new column 'nm_pais' that initially takes the value of 'nm_time_casa', which represents the home team in the predictions.
     df["nm_pais"] = df["nm_time_casa"]
     # Merge the tips DataFrame with the countries DataFrame to add the country ID (id_pais) based on the country name (nm_pais).
@@ -396,7 +397,7 @@ def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.Dat
     # calculate rank changes by merging the previous round's ranking with the current round's ranking.
     if df.empty:
         return df
-    elif round_check > 1:
+    elif round_check >= 0:
         # Filter the DataFrame to get the previous round's ranking and the current round's ranking, then merge them on player name and phase.
         round_prev = df[df['nr_round'] != round_check]['nr_round'].max()
         df_1 = df[df['nr_round'] == round_prev]
