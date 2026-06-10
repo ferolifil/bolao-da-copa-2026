@@ -397,7 +397,7 @@ def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.Dat
     # calculate rank changes by merging the previous round's ranking with the current round's ranking.
     if df.empty:
         return df
-    elif round_check >= 0:
+    elif round_check > 0:
         # Filter the DataFrame to get the previous round's ranking and the current round's ranking, then merge them on player name and phase.
         round_prev = df[df['nr_round'] != round_check]['nr_round'].max()
         df_1 = df[df['nr_round'] == round_prev]
@@ -420,4 +420,8 @@ def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.Dat
         # Rename columns to have consistent names for the current round and select the final columns for the ranking table.
         df_merged = df_merged.rename(columns={'nr_rank_curr': 'nr_rank', 'vl_pontuacao_curr': 'vl_pontuacao','nr_rank_2_curr': 'nr_rank_2','nr_round_curr': 'nr_round','ts_atl_curr': 'ts_atl'})
         df_merged = df_merged[['nm_player','nm_fase','vl_pontuacao','nr_rank','nr_rank_2','nr_round','rk_gap','tx_gap','ts_atl']]
+    else:
+        df_merged = df
+        df_merged['rk_gap'] = 0
+        df_merged['tx_gap'] = "-"
         return df_merged.sort_values(by=['nr_rank','nm_player'], ascending=[True,True])
