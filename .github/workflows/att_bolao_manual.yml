@@ -1,4 +1,4 @@
-name: Update Bolão da Copa Data
+name: Update Bolão da Copa Data - Manual
 
 on:
   workflow_dispatch:  # Allow manual trigger
