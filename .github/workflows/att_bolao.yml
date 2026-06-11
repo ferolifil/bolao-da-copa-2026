@@ -1,6 +1,8 @@
 name: Update Bolão da Copa Data
 
 on:
+  schedule:
+    - cron: '15 * * * *'  # Every hour at minute 15
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -30,5 +32,5 @@ jobs:
 
   # on:
   #   schedule:
-  #     - cron: '0 */6 * * *'  # Every 6 hours
+  #     - cron: '15 * * * *'  # Every hour at minute 15
   #   workflow_dispatch:  # Allow manual trigger

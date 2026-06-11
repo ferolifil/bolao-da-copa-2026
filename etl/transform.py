@@ -155,7 +155,7 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
     df_merged_2['vl_pontuacao'] = df_merged_2['vl_pontuacao'].fillna(0).astype(int)
     df_points = (
         df_merged_2
-            .groupby(['nm_player','nm_fase'], as_index=False)['vl_pontuacao'].sum()
+            .groupby(['nm_player'], as_index=False)['vl_pontuacao'].sum()
             .sort_values(by='vl_pontuacao', ascending=False)
     )
     # Assign ranks to players based on their total points, using dense ranking for ties and also a first-come-first-served ranking for tie-breaking.
@@ -364,6 +364,7 @@ def make_base_table(df_tips: pd.DataFrame, df_countries: pd.DataFrame) -> pd.Dat
     # Drop intermediate columns used for tie-breaking and sorting, and return the final DataFrame sorted by group and position.
     return df.drop(columns=["tie_key", "rk", "rk2", "nm_pais_ajst"]).sort_values(['nm_player','nm_grpo','pos'], ascending=[True,True,True])
 
+
 def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.DataFrame:
     """
     Calculate final ranking with rank changes between consecutive rounds.
@@ -403,7 +404,7 @@ def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.Dat
         df_1 = df[df['nr_round'] == round_prev]
         df_2 = df[df['nr_round'] == round_check]
 
-        df_merged = pd.merge(df_1, df_2, on=['nm_player','nm_fase'], how='outer', suffixes=('_prev', '_curr'))
+        df_merged = pd.merge(df_1, df_2, on=['nm_player'], how='outer', suffixes=('_prev', '_curr'))
         df_merged['rk_gap'] = df_merged['nr_rank_prev'].fillna(0).astype(int) - df_merged['nr_rank_curr'].fillna(0).astype(int)
 
         df_merged["tx_gap"] = np.select(
@@ -419,9 +420,11 @@ def make_ranking_final(df_ranking_hst: pd.DataFrame, round_check: int) -> pd.Dat
         )
         # Rename columns to have consistent names for the current round and select the final columns for the ranking table.
         df_merged = df_merged.rename(columns={'nr_rank_curr': 'nr_rank', 'vl_pontuacao_curr': 'vl_pontuacao','nr_rank_2_curr': 'nr_rank_2','nr_round_curr': 'nr_round','ts_atl_curr': 'ts_atl'})
-        df_merged = df_merged[['nm_player','nm_fase','vl_pontuacao','nr_rank','nr_rank_2','nr_round','rk_gap','tx_gap','ts_atl']]
+        df_merged = df_merged[['nm_player','vl_pontuacao','nr_rank','nr_rank_2','nr_round','rk_gap','tx_gap','ts_atl']]
+        return df_merged.sort_values(by=['nr_rank','nm_player'], ascending=[True,True])
     else:
         df_merged = df
         df_merged['rk_gap'] = 0
         df_merged['tx_gap'] = "-"
+        df_merged = df_merged[['nm_player','vl_pontuacao','nr_rank','nr_rank_2','nr_round','rk_gap','tx_gap','ts_atl']]
         return df_merged.sort_values(by=['nr_rank','nm_player'], ascending=[True,True])
