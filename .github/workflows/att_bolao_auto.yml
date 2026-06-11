@@ -2,7 +2,7 @@ name: Update Bolão da Copa Data - Auto
 
 on:
   schedule:
-    - cron: '2 * * * *' # Every hour at minute 15
+    - cron: '15 * * * *' # Every hour at minute 15
 
 jobs:
   att_bolao:
