@@ -149,3 +149,105 @@ def check_run_round(round_check: int, creds: any, sheets_var: list) -> bool:
     else:
         print("Arquivo já está atualizado.")
         return False
+
+
+def parse_form_tips_to_long(df: pd.DataFrame, nm_fase: str | None = None) -> pd.DataFrame:
+    """
+    Parse a Google Forms wide export of match predictions into a long DataFrame.
+
+    Input example columns:
+    Nome\tMatch [Home]\tMatch [Away]\tEm caso de pênaltis [Match]\t...
+
+    Returns rows with columns:
+    nm_player, nm_fase, nm_cfr, nm_time_casa, vl_time_casa, nm_time_fora, vl_time_fora, tx_resultado, tx_penaltis
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=[
+            "nm_player", "nm_fase", "nm_cfr", "nm_time_casa", "vl_time_casa",
+            "nm_time_fora", "vl_time_fora", "tx_resultado", "tx_penaltis",
+        ])
+
+    # detect player column
+    player_col = next((c for c in df.columns if str(c).strip().lower() in {"nome", "name", "player"}), None)
+    if player_col is None:
+        raise ValueError("Nenhuma coluna de jogador encontrada (esperado 'Nome').")
+
+    ignored = {player_col, "Carimbo de data/hora", "Endereço de e-mail", "Deixe uma foto sua aqui", "Campeão", "Vice", "Artilheiro"}
+
+    candidate_cols = [c for c in df.columns if c not in ignored]
+
+    # Build matches mapping: match_ref -> {home_col, away_col, home_name, away_name, pen_col}
+    matches = {}
+    for col in candidate_cols:
+        s = str(col).strip()
+        # penalty column
+        if "pênalt" in s.lower() or "penalt" in s.lower():
+            # attempt to extract match ref inside brackets
+            if "[" in s and "]" in s:
+                match_ref = s.split("[", 1)[1].split("]", 1)[0].strip()
+            else:
+                match_ref = s
+            matches.setdefault(match_ref, {})["pen_col"] = col
+            continue
+
+        # expected format: 'Match Ref  [Team]'
+        if "[" in s and "]" in s:
+            team = s.split("[", 1)[1].split("]", 1)[0].strip()
+            match_ref = s.split(" [", 1)[0].strip() if " [" in s else s.split("[", 1)[0].strip()
+            m = matches.setdefault(match_ref, {})
+            if "home_col" not in m:
+                m["home_col"] = col
+                m["home_name"] = team
+            elif "away_col" not in m:
+                m["away_col"] = col
+                m["away_name"] = team
+            else:
+                # ignore extras
+                pass
+
+    rows = []
+    for _, row in df.iterrows():
+        player = row[player_col]
+        if pd.isna(player) or str(player).strip() == "":
+            continue
+        for match_ref, info in matches.items():
+            home_col = info.get("home_col")
+            away_col = info.get("away_col")
+            pen_col = info.get("pen_col")
+            if not home_col or not away_col:
+                continue
+
+            home_name = info.get("home_name", "")
+            away_name = info.get("away_name", "")
+
+            home_val = row.get(home_col, "")
+            away_val = row.get(away_col, "")
+            pen_val = row.get(pen_col, "") if pen_col else ""
+
+            if pd.isna(home_val):
+                home_val = ""
+            if pd.isna(away_val):
+                away_val = ""
+            if pd.isna(pen_val):
+                pen_val = ""
+
+            fase_val = nm_fase if nm_fase is not None else (row.get("nm_fase", "") if "nm_fase" in df.columns else "")
+
+            tx_res = f"{home_name} {home_val} x {away_val} {away_name}"
+
+            rows.append({
+                "nm_player": str(player).strip(),
+                "nm_fase": fase_val,
+                "nm_cfr": match_ref,
+                "nm_time_casa": home_name,
+                "vl_time_casa": home_val,
+                "nm_time_fora": away_name,
+                "vl_time_fora": away_val,
+                "tx_resultado": tx_res,
+                "tx_penaltis": pen_val,
+            })
+
+    return pd.DataFrame(rows, columns=[
+        "nm_player", "nm_fase", "nm_cfr", "nm_time_casa", "vl_time_casa",
+        "nm_time_fora", "vl_time_fora", "tx_resultado", "tx_penaltis",
+    ])

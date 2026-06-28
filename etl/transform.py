@@ -171,6 +171,95 @@ def calculate_points(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_chec
 
     return df_tips_final, df_points
 
+def calculate_points_knockout_stage(df_tips: pd.DataFrame, df_results: pd.DataFrame, round_check: int) -> pd.DataFrame:
+    """
+    Calculates the score and ranking for each player based on their predictions and the actual match results.
+
+    This function merges the tips DataFrame with the results DataFrame, compares predictions with actual outcomes,
+    assigns points according to the prediction accuracy, and ranks the players. It also adds the current round and
+    a timestamp for tracking.
+
+    Parameters
+    ----------
+    df_tips : pandas.DataFrame
+        DataFrame containing players' predictions, processed and normalized.
+    df_results : pandas.DataFrame
+        DataFrame containing the actual results for each match, processed and normalized.
+    round_check : int
+        The current round number, used for tracking.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with player names, total points, rankings, round number, and last update timestamp.
+    """
+    # Calcuate the predicted result for the home team based on the predicted goals for both teams.
+    df_tips["result_ref_casa"] = np.select(
+        [
+            df_tips["vl_time_casa"] > df_tips["vl_time_fora"],
+            df_tips["vl_time_casa"] == df_tips["vl_time_fora"],
+        ],
+        ["V", "E"],
+        default="D"
+    )
+    # Calculate the actual result for the home team based on the actual goals for both teams, 
+    # assigning "V" for home win, "E" for draw, "D" for away win, and an empty string for games that have not been played.
+    df_results = df_results[df_results['nm_fase'] == '16avos'].copy()
+    df_results["result_ref_casa"] = np.select(
+        [
+            (df_results["vl_time_casa"].isna()) | (df_results["vl_time_fora"].isna()),  # game not played or missing data
+            (df_results["vl_time_casa"] > df_results["vl_time_fora"]).fillna(False),   # home team win
+            (df_results["vl_time_casa"] == df_results["vl_time_fora"]).fillna(False),  # draw
+        ],
+        ["", "V", "E"],  # values for each condition: empty string for missing data, "V" for home win, "E" for draw
+        default="D"  # away team win
+    )
+    df_results = normalize_df(df_results)
+
+    df_merged = df_tips.merge(df_results, left_on=['nm_cfr','nm_fase'], right_on=['nm_cfr','nm_fase'], how='left')
+    df_merged["vl_pontuacao"] = np.select(
+        [
+            df_merged["result_ref_casa_y"].isna(),  # game not played or missing data
+            ((df_merged["vl_time_casa_x"] == df_merged["vl_time_casa_y"]) & (df_merged["vl_time_fora_x"] == df_merged["vl_time_fora_y"]) & (df_merged["tx_penaltis_x"] == df_merged["tx_penaltis_y"])).fillna(False),
+            ((df_merged["vl_time_casa_x"] == df_merged["vl_time_casa_y"]) & (df_merged["vl_time_fora_x"] == df_merged["vl_time_fora_y"]) & (df_merged["tx_penaltis_x"] != df_merged["tx_penaltis_y"])).fillna(False),   # home team win
+            (df_merged["result_ref_casa_x"] == df_merged["result_ref_casa_y"]).fillna(False),  # draw
+        ],
+        [None, 4, 3, 1],  # values for each condition: empty string for missing data, 3 for home win, 1 for draw
+        default=0  # away team win
+    )
+
+    # Group by player and sum points to get total score for each player, then rank players based on their scores.
+    df_merged_2 = df_merged.copy()
+    df_merged_2['vl_pontuacao'] = df_merged_2['vl_pontuacao'].fillna(0).astype(int)
+    df_points = (
+        df_merged_2
+            .groupby(['nm_player'], as_index=False)['vl_pontuacao'].sum()
+            .sort_values(by='vl_pontuacao', ascending=False)
+    )
+    # Assign ranks to players based on their total points, using dense ranking for ties and also a first-come-first-served ranking for tie-breaking.
+    df_points['nr_rank'] = df_points['vl_pontuacao'].rank(method='dense', ascending=False).astype(int)
+    df_points['nr_rank_2'] = df_points['vl_pontuacao'].rank(method='first', ascending=False).astype(int)
+    # Add the current round number and timestamp of the last update to the DataFrame for tracking purposes.
+    df_points['nr_round'] = round_check + 72
+    df_points['ts_atl'] = pd.Timestamp.now(tz='America/Sao_Paulo')
+
+
+    df_merged['tx_resultado'] = np.select(
+        [
+            df_merged["result_ref_casa_x"] == "E",  # home team win
+        ],
+        [
+            df_merged['nm_time_casa_x'] + " " + df_merged['vl_time_casa_x'].astype(str) + " x " + df_merged['vl_time_fora_x'].astype(str) + " " + df_merged['nm_time_fora_x'] + " (" + df_merged['tx_penaltis_x'] + ")"  # away team win, 
+        ],  # values for each condition: empty string for missing data, 3 for home win, 1 for draw
+        default=df_merged['nm_time_casa_x'] + " " + df_merged['vl_time_casa_x'].astype(str) + " x " + df_merged['vl_time_fora_x'].astype(str) + " " + df_merged['nm_time_fora_x']  # away team win
+    )
+
+    df_tips_final = df_merged[['nm_player','nm_fase','nm_cfr','nm_time_casa_x', 'vl_time_casa_x', 'nm_time_fora_x', 'vl_time_fora_x', 'tx_penaltis_x', 'vl_pontuacao', 'tx_resultado']]
+    df_tips_final = df_tips_final.rename(columns={"nm_time_casa_x": "nm_time_casa", "nm_time_fora_x": "nm_time_fora", "vl_time_fora_x": "vl_time_fora", "vl_time_casa_x": "vl_time_casa", "tx_penaltis_x": "tx_penaltis"})
+
+    return df_tips_final, df_points
+
+
 
 def solve_by_home_away(df: pd.DataFrame, id_h_a: int) -> pd.DataFrame:
     """
